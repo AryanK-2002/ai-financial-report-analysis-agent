@@ -153,7 +153,7 @@ or
 
 ## Sample Output
 
-| Company | Revenue | Net Income | Debt | Health |
+| Company | Revenue(Cr) | Net Income(Cr) | Total Debt(Cr) | Financial Health |
 |----------|---------|------------|------|---------|
 | TCS | 63,437 | 12,760 | Not Reported | Healthy |
 | HDFC Bank | 724.2 | 164.7 | 5,993 | Moderate |
@@ -174,27 +174,6 @@ or
 
 ---
 
-## Project Structure
-
-```
-workflow/
-    financial-analysis-agent.json
-
-docs/
-    workflow-diagram.png
-
-demo/
-    demo-video.mp4
-
-screenshots/
-    workflow.png
-    sample-output.png
-
-README.md
-LICENSE
-```
-
----
 
 
 
