@@ -153,7 +153,7 @@ or
 
 ## Sample Output
 
-| Company | Revenue(Cr) | Net Income(Cr) | Total Debt(Cr) | Financial Health |
+| Company | Revenue (Cr) | Net Income (Cr) | Total Debt (Cr) | Financial Health |
 |----------|---------|------------|------|---------|
 | TCS | 63,437 | 12,760 | Not Reported | Healthy |
 | HDFC Bank | 724.2 | 164.7 | 5,993 | Moderate |
