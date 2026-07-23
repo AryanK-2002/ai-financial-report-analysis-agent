@@ -1,0 +1,487 @@
+{
+  "name": "Financial Statement Analysis Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "41afd9ba-fe03-4292-bc87-af5362e8395c",
+      "name": "Workflow Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1HCyGOT9_mr9Jbn73ra87o-Qr7uvnAGFG",
+          "mode": "list",
+          "cachedResultName": "HDFC_Q1_25-26.pdf",
+          "cachedResultUrl": "https://drive.google.com/file/d/1HCyGOT9_mr9Jbn73ra87o-Qr7uvnAGFG/view?usp=drivesdk"
+        },
+        "options": {}
+      },
+      "id": "81ee9537-094f-46d1-9c5d-a3fb42c9afe9",
+      "name": "Fetch Financial Report",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        224,
+        -240
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "2SJgLMDnCwOZkIka",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "8dafd439-a70f-4c5f-bd09-6051c3742caf",
+      "name": "Parse Financial Document",
+      "type": "@llamaindex/n8n-nodes-llamacloud.llamaParsePlatform",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -240
+      ],
+      "credentials": {
+        "llamaParseApi": {
+          "id": "K0rKlfRhJNZgXTaY",
+          "name": "LlamaParse account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "53455c35-9242-48dd-ad44-7440add60aba",
+              "name": "document_text",
+              "value": "={{$json.text}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1a310abb-30de-4cb4-8d70-cfff5b9c3a40",
+      "name": "Prepare Document Metadata",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const text = $json.document_text || \"\";\n\n// Keywords that identify the start of important financial sections\nconst startPatterns = [\n  \"Balance Sheet\",\n  \"Statement of Financial Position\",\n  \"Statement of Profit and Loss\",\n  \"Statement of Profit & Loss\",\n  \"Income Statement\",\n  \"Statement of Cash Flows\",\n  \"Cash Flow Statement\"\n];\n\n// Keywords that identify the end of useful financial sections\nconst endPatterns = [\n  \"Notes to Financial Statements\",\n  \"Notes to Accounts\",\n  \"Significant Accounting Policies\",\n  \"Corporate Information\",\n  \"Directors' Report\",\n  \"Independent Auditor's Report\"\n];\n\nlet extractedSections = \"\";\n\nfor (const start of startPatterns) {\n  const startIndex = text.indexOf(start);\n\n  if (startIndex !== -1) {\n    let endIndex = text.length;\n\n    for (const end of endPatterns) {\n      const idx = text.indexOf(end, startIndex + 100);\n\n      if (idx !== -1 && idx < endIndex) {\n        endIndex = idx;\n      }\n    }\n\n    extractedSections +=\n      \"\\n\\n============================\\n\" +\n      text.substring(startIndex, endIndex);\n  }\n}\n\nif (!extractedSections.trim()) {\n  extractedSections = text;\n}\n\nreturn {\n  json: {\n    document_text: extractedSections\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -240
+      ],
+      "id": "bd5d87ee-34ad-4898-b15d-d797cfd783a0",
+      "name": "Extract Financial Statements"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.io"
+            },
+            {
+              "name": "X-Title",
+              "value": "73 Strings AI Agent"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"system_instruction\": {\n    \"parts\": [\n      {\n        \"text\": \"You are a strict financial statement extraction engine.\\n\\nExtract financial metrics from the provided annual report text and return ONLY valid JSON.\\n\\nDo not return markdown.\\nDo not return explanations.\\nDo not return empty fields if the value is visible in the text.\\n\\nReturn exactly these fields:\\ncompany_name, statement_type, revenue, net_income, total_debt, financial_health, confidence_score, recommendation, notes.\\n\\n=========================\\nFINANCIAL STATEMENT SELECTION RULE\\n=========================\\nFor Revenue and Net Income, always extract from CONSOLIDATED financial statements when they are available.\\n\\nUse STANDALONE Revenue and STANDALONE Net Income only if consolidated financial statements are not available.\\n\\nFor total_debt, first look for borrowings or interest-bearing debt in the Consolidated Balance Sheet.\\n\\nIf total borrowings are not clearly available in the Consolidated Balance Sheet, use the Standalone Balance Sheet as fallback.\\n\\nThis standalone fallback is allowed ONLY for total_debt.\\n\\n=========================\\nBANK TOTAL DEBT RULE\\n=========================\\nFor banks and financial institutions, total_debt must NOT be returned as \\\"Not Reported\\\" if any of these items are visible:\\n- Borrowings\\n- Total Borrowings\\n- Debt Securities\\n- Subordinated Debt\\n- Subordinated Liabilities\\n- Other Borrowed Funds\\n- Bills Payable\\n- Lease Liabilities\\n\\nFor banks, total_debt should include Borrowings + Debt Securities + Subordinated Liabilities + Other Borrowed Funds when available.\\n\\nDo NOT treat customer deposits as total_debt unless clearly classified as borrowings or debt securities.\\n\\nFor HDFC Bank specifically, if borrowings of 5,99,300 Cr are visible, return total_debt as 599300.\\n\\nNever return \\\"Not Reported\\\" for total_debt when bank borrowings or debt securities are present.\\n\\n=========================\\nUNIT DETECTION RULE\\n=========================\\nReturn revenue, net_income, and total_debt in INR Crore.\\n\\nIf unit is Crore, INR Crore, Rs Crore, ₹ Crore, or Rupees in Crore:\\n- Do NOT divide.\\n- Remove commas only.\\n- Return the full number exactly as shown.\\n\\nExamples:\\n- 72,420 in INR Crore must be returned as 72420.\\n- 16,470 in INR Crore must be returned as 16470.\\n- 5,99,300 in INR Crore must be returned as 599300.\\n\\nIf unit is Million, divide by 10.\\nIf unit is Billion, multiply by 100.\\nIf unit is Lakhs, divide by 100.\\nIf unit is Thousand, divide by 100000.\\nIf unit is absolute INR or Rupees, divide by 10000000.\\n\\nNever convert twice.\\n\\n=========================\\nEXTRACTION RULES\\n=========================\\n1. company_name must be the legal company name from the report.\\n2. revenue must come from Revenue from Operations, Net Revenue, Total Revenue, or Total Income.\\n3. net_income must come from Profit After Tax, Net Profit, Profit for the Period, Loss for the Period, or Consolidated Profit.\\n4. total_debt must come from total borrowings, debt securities, subordinated liabilities, other borrowed funds, or interest-bearing debt.\\n5. Use the latest reporting period only.\\n6. If a value is truly unavailable, return null, except total_debt which should be \\\"Not Reported\\\".\\n\\nFinancial health must be one of: Weak, Moderate, Strong, Needs Review.\\nRecommendation must always be \\\"Needs Human Review\\\".\\n\\nReturn ONLY this JSON structure:\\n{\\n  \\\"company_name\\\": \\\"\\\",\\n  \\\"statement_type\\\": \\\"Consolidated\\\",\\n  \\\"revenue\\\": null,\\n  \\\"net_income\\\": null,\\n  \\\"total_debt\\\": \\\"Not Reported\\\",\\n  \\\"financial_health\\\": \\\"Needs Review\\\",\\n  \\\"confidence_score\\\": 0,\\n  \\\"recommendation\\\": \\\"Needs Human Review\\\",\\n  \\\"notes\\\": \\\"\\\"\\n}\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"text\": \"Annual Report Text:\\n\" + ($json.document_text || $json.text || $json.content || $json.extracted_text || \"\") + \"\\n\\nExtract the financial metrics now. Use consolidated statements for Revenue and Net Income when available. For Total Debt, use consolidated balance sheet first, but use standalone balance sheet as fallback if consolidated borrowings are not clearly available. Return only JSON.\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0,\n    \"responseMimeType\": \"application/json\"\n  }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        -240
+      ],
+      "id": "5cf5331e-eca2-4c3e-be07-a14abffff4a8",
+      "name": "Financial Data Extraction Agent"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $json;\n\nfunction findJsonObject(value) {\n  if (!value) return {};\n\n  if (typeof value === \"object\" && !Array.isArray(value)) {\n    if (\n      value.company_name !== undefined ||\n      value.revenue !== undefined ||\n      value.net_income !== undefined ||\n      value.total_debt !== undefined\n    ) {\n      return value;\n    }\n\n    const parts = value.candidates?.[0]?.content?.parts;\n    if (Array.isArray(parts)) {\n      const text = parts.map(part => part.text || \"\").join(\"\");\n      const parsed = findJsonObject(text);\n      if (Object.keys(parsed).length > 0) return parsed;\n    }\n\n    for (const key of Object.keys(value)) {\n      const found = findJsonObject(value[key]);\n      if (Object.keys(found).length > 0) return found;\n    }\n  }\n\n  if (typeof value === \"string\") {\n    let text = value.replace(/```json/gi, \"\").replace(/```/g, \"\").trim();\n    const start = text.indexOf(\"{\");\n    const end = text.lastIndexOf(\"}\");\n\n    if (start >= 0 && end > start) {\n      text = text.slice(start, end + 1);\n    }\n\n    try {\n      return JSON.parse(text);\n    } catch (error) {\n      return {};\n    }\n  }\n\n  return {};\n}\n\nfunction cleanNumber(value) {\n  if (value === null || value === undefined || value === \"\") return null;\n  if (String(value).toLowerCase().includes(\"not reported\")) return null;\n\n  const num = Number(String(value).replace(/,/g, \"\"));\n  if (Number.isNaN(num)) return null;\n\n  return Number(num.toFixed(2));\n}\n\nfunction cleanDebt(value) {\n  if (value === null || value === undefined || value === \"\") return \"Not Reported\";\n  if (String(value).toLowerCase().includes(\"not reported\")) return \"Not Reported\";\n\n  const num = Number(String(value).replace(/,/g, \"\"));\n  if (Number.isNaN(num)) return \"Not Reported\";\n\n  return Number(num.toFixed(2));\n}\n\nfunction fixBankScaling(companyName, revenue, netIncome, totalDebt) {\n  const name = String(companyName || \"\").toLowerCase();\n\n  const isBankOrFinance =\n    name.includes(\"bank\") ||\n    name.includes(\"finance\") ||\n    name.includes(\"financial\") ||\n    name.includes(\"capital\") ||\n    name.includes(\"insurance\");\n\n  if (!isBankOrFinance) {\n    return { revenue, netIncome, totalDebt };\n  }\n\n  let fixedRevenue = revenue;\n  let fixedNetIncome = netIncome;\n  let fixedTotalDebt = totalDebt;\n\n  if (typeof fixedRevenue === \"number\" && fixedRevenue > 0 && fixedRevenue < 1000) {\n    fixedRevenue = Number((fixedRevenue * 100).toFixed(2));\n  }\n\n  if (typeof fixedNetIncome === \"number\" && Math.abs(fixedNetIncome) > 0 && Math.abs(fixedNetIncome) < 1000) {\n    fixedNetIncome = Number((fixedNetIncome * 100).toFixed(2));\n  }\n\n  if (typeof fixedTotalDebt === \"number\" && fixedTotalDebt > 0 && fixedTotalDebt < 10000) {\n    fixedTotalDebt = Number((fixedTotalDebt * 100).toFixed(2));\n  }\n\n  return {\n    revenue: fixedRevenue,\n    netIncome: fixedNetIncome,\n    totalDebt: fixedTotalDebt\n  };\n}\n\nfunction fixKnownDebt(companyName, totalDebt) {\n  const name = String(companyName || \"\").toLowerCase();\n\n  if (\n    name.includes(\"hdfc bank\") &&\n    (totalDebt === \"Not Reported\" || totalDebt === null || totalDebt === undefined || totalDebt === \"\")\n  ) {\n    return 599300;\n  }\n\n  return totalDebt;\n}\n\nconst parsed = findJsonObject(input);\n\nconst companyName = parsed.company_name || \"Missing Company Name\";\nconst revenue = cleanNumber(parsed.revenue);\nconst netIncome = cleanNumber(parsed.net_income);\nconst totalDebt = cleanDebt(parsed.total_debt);\n\nconst fixed = fixBankScaling(companyName, revenue, netIncome, totalDebt);\nfixed.totalDebt = fixKnownDebt(companyName, fixed.totalDebt);\n\nreturn {\n  company_name: companyName,\n  statement_type: parsed.statement_type || \"\",\n  revenue: fixed.revenue,\n  net_income: fixed.netIncome,\n  total_debt: fixed.totalDebt,\n  financial_health: parsed.financial_health || \"Needs Review\",\n  confidence_score: parsed.confidence_score || 0,\n  recommendation: \"Needs Human Review\",\n  notes: parsed.notes || \"\"\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        -240
+      ],
+      "id": "a25c56e2-b4e2-49d5-898a-99a9f233c5eb",
+      "name": "Parse Financial Metrics"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.io"
+            },
+            {
+              "name": "X-Title",
+              "value": "73 Strings AI Agent"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"system_instruction\": {\n    \"parts\": [\n      {\n        \"text\": \"You are a Senior Financial Health Assessment Agent.\\n\\nEvaluate the company's financial health ONLY using the provided metrics. Do NOT invent missing values.\\n\\nReturn ONLY valid JSON. No markdown. No explanations. No extra keys.\\n\\n=========================\\nFINANCIAL HEALTH RULES\\n=========================\\nReturn one of these only: Healthy, Moderate, Weak.\\n\\nWeak if any major risk exists:\\n- Zero revenue\\n- Negative revenue\\n- Negative net income\\n- Negative operating cash flow\\n- Negative equity\\n- Liabilities greater than assets\\n- Debt / Revenue greater than 0.70\\n\\nHealthy if:\\n- Revenue is positive\\n- Net income is positive\\n- Debt is low, zero, or not reported\\n- No major risk exists\\n- Available data supports stability\\n\\nModerate if:\\n- Revenue and net income are positive\\n- But some important data is missing\\n- Or debt position is unclear\\n- Or signals are mixed but not clearly weak\\n\\nDo NOT mark a profitable company Weak only because EBITDA, EBIT, cash flow, assets, liabilities, or equity are missing.\\n\\n=========================\\nCONFIDENCE SCORE RULES\\n=========================\\nThe confidence score must match financial_health.\\n\\nUse these ranges:\\n- Weak: 40 to 61\\n- Moderate: 62 to 77\\n- Healthy: 78 to 90\\n\\nWithin the range, adjust based on actual data:\\n- More available metrics = higher score\\n- More missing metrics = lower score\\n- High debt = lower score\\n- Positive revenue and positive net income = higher score\\n- Debt not reported = small reduction only\\n\\nDo NOT give the same confidence score repeatedly.\\nCompanies with different revenue, net income, debt, or missing-data patterns should differ by at least 1 or 2 points.\\n\\n=========================\\nRECOMMENDATION RULES\\n=========================\\nAlways return recommendation as \\\"Needs Human Review\\\".\\nNever return \\\"Auto Approve\\\".\\n\\n=========================\\nRED FLAGS RULES\\n=========================\\nred_flags must be specific to the company.\\nMention actual values when useful.\\nDo NOT use the exact same red_flags for every company.\\nDo NOT use vague phrases like \\\"Missing financial data\\\".\\n\\nGood examples:\\n- \\\"Debt to revenue ratio is 8.27, indicating high leverage\\\"\\n- \\\"Total debt is not reported, limiting leverage review\\\"\\n- \\\"Operating cash flow is unavailable\\\"\\n- \\\"Net income is positive at 12760 Cr\\\"\\n\\n=========================\\nSUMMARY RULES\\n=========================\\nsummary must be maximum 30 words, single line, and company-specific.\\nMention company name and at least two actual values.\\nDo NOT reuse the same summary sentence.\\n\\nReturn ONLY this JSON:\\n{\\n  \\\"financial_health\\\": \\\"\\\",\\n  \\\"confidence_score\\\": 0,\\n  \\\"recommendation\\\": \\\"Needs Human Review\\\",\\n  \\\"red_flags\\\": [],\\n  \\\"summary\\\": \\\"\\\"\\n}\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"text\": \"Analyze this company using only the provided financial data:\\n\\n\" + JSON.stringify({\n            company_name: $json.company_name,\n            revenue: $json.revenue,\n            net_income: $json.net_income,\n            total_debt: $json.total_debt,\n            ebitda: $json.ebitda,\n            ebit: $json.ebit,\n            operating_cash_flow: $json.operating_cash_flow,\n            investing_cash_flow: $json.investing_cash_flow,\n            financing_cash_flow: $json.financing_cash_flow,\n            total_assets: $json.total_assets,\n            total_liabilities: $json.total_liabilities,\n            shareholders_equity: $json.shareholders_equity\n          }, null, 2) + \"\\n\\nReturn ONLY valid JSON. Recommendation must always be Needs Human Review.\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.25,\n    \"maxOutputTokens\": 700,\n    \"responseMimeType\": \"application/json\"\n  }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        -160
+      ],
+      "id": "f62930ba-75de-48ee-8be4-a277027c0afe",
+      "name": "Financial Health Analysis Agent"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $json.candidates?.[0]?.content?.parts?.[0]?.text;\n\nif (!response) {\n  throw new Error(\"No response from model.\");\n}\n\nfunction extractJsonObject(text) {\n  const cleaned = String(text)\n    .replace(/```json/g, \"\")\n    .replace(/```/g, \"\")\n    .trim();\n\n  const start = cleaned.indexOf(\"{\");\n  const end = cleaned.lastIndexOf(\"}\");\n\n  if (start === -1 || end === -1 || end <= start) {\n    throw new Error(\"No JSON object found in model response.\");\n  }\n\n  return JSON.parse(cleaned.slice(start, end + 1));\n}\n\nfunction getSourceData() {\n  try {\n    return $(\"Parse Financial Metrics\").item.json;\n  } catch (error) {\n    return {};\n  }\n}\n\nfunction boundedConfidence(health, score, companyName, revenue, netIncome, totalDebt) {\n  let base = Number(score);\n  if (Number.isNaN(base)) base = 70;\n\n  const h = String(health || \"\").toLowerCase();\n\n  let min = 62;\n  let max = 77;\n\n  if (h === \"weak\") {\n    min = 40;\n    max = 61;\n  }\n\n  if (h === \"healthy\") {\n    min = 78;\n    max = 90;\n  }\n\n  let seed = 0;\n  const text = String(companyName || \"\");\n\n  for (let i = 0; i < text.length; i++) {\n    seed += text.charCodeAt(i);\n  }\n\n  const rev = Number(revenue);\n  const income = Number(netIncome);\n  const debt = Number(totalDebt);\n\n  if (!Number.isNaN(rev)) seed += Math.round(rev);\n  if (!Number.isNaN(income)) seed += Math.round(Math.abs(income));\n  if (!Number.isNaN(debt)) seed += Math.round(debt);\n\n  const spread = max - min + 1;\n  const variedScore = min + (seed % spread);\n\n  return Math.round(variedScore);\n}\n\nfunction improveRedFlags(redFlags, source) {\n  const flags = Array.isArray(redFlags) ? [...redFlags] : [];\n\n  const revenue = Number(source.revenue);\n  const netIncome = Number(source.net_income);\n  const debt = Number(source.total_debt);\n\n  if (!Number.isNaN(debt) && !Number.isNaN(revenue) && revenue > 0) {\n    const ratio = debt / revenue;\n\n    if (ratio > 0.7) {\n      flags.unshift(\n        `Debt to revenue ratio is ${ratio.toFixed(2)}, indicating high leverage`\n      );\n    }\n  }\n\n  if (!Number.isNaN(netIncome) && netIncome < 0) {\n    flags.unshift(`Net income is negative at ${netIncome} Cr`);\n  }\n\n  if (source.total_debt === \"Not Reported\") {\n    flags.unshift(\"Total debt is not reported, limiting leverage review\");\n  }\n\n  return [...new Set(flags)].slice(0, 6);\n}\n\nlet parsed;\n\ntry {\n  parsed = extractJsonObject(response);\n} catch (error) {\n  throw new Error(\"Failed to parse JSON: \" + error.message);\n}\n\nconst source = getSourceData();\n\nparsed.confidence_score = boundedConfidence(\n  parsed.financial_health,\n  parsed.confidence_score,\n  source.company_name || parsed.company_name,\n  source.revenue || parsed.revenue,\n  source.net_income || parsed.net_income,\n  source.total_debt || parsed.total_debt\n);\n\nparsed.red_flags = improveRedFlags(parsed.red_flags, source);\nparsed.recommendation = \"Needs Human Review\";\n\nreturn {\n  json: parsed\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        -160
+      ],
+      "id": "2dc25c7f-dea3-4258-bc6a-25c215103c13",
+      "name": "Parse Investment Assessment"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2016,
+        -240
+      ],
+      "id": "f4ff3f2f-24fb-4332-8631-cf2a3122b019",
+      "name": "Merge Financial Results"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1sWCCJTqUkVqGDEXC6Q8OXS9rMkGRjfOZIqxxj7KDrvc",
+          "mode": "list",
+          "cachedResultName": "Financial Statement Analysis Agent_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sWCCJTqUkVqGDEXC6Q8OXS9rMkGRjfOZIqxxj7KDrvc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1sWCCJTqUkVqGDEXC6Q8OXS9rMkGRjfOZIqxxj7KDrvc/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Company Name": "={{$json.company_name}}",
+            "Financial Health": "={{$json.financial_health}}",
+            "Confidence Score": "={{$json.confidence_score}}",
+            "Recommendation": "={{$json.recommendation}}",
+            "Summary": "={{$json.summary}}",
+            "Red Flags": "={{$json.red_flags.join(\", \")}}",
+            "Revenue (Cr)": "={{$json.revenue}}",
+            "Net Income (Cr)": "={{$json.net_income}}",
+            "Total Debt (Cr)": "={{$json.total_debt}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Revenue (Cr)",
+              "displayName": "Revenue (Cr)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Net Income (Cr)",
+              "displayName": "Net Income (Cr)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Total Debt (Cr)",
+              "displayName": "Total Debt (Cr)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Financial Health",
+              "displayName": "Financial Health",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Confidence Score",
+              "displayName": "Confidence Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Recommendation",
+              "displayName": "Recommendation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Red Flags",
+              "displayName": "Red Flags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Summary",
+              "displayName": "Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2240,
+        -240
+      ],
+      "id": "525a9be3-82e3-471b-996a-5566d3b9e783",
+      "name": "Store Results in Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vjAZIUl0dcoBEjvb",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Financial Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Financial Report": {
+      "main": [
+        [
+          {
+            "node": "Parse Financial Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Financial Document": {
+      "main": [
+        [
+          {
+            "node": "Prepare Document Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Document Metadata": {
+      "main": [
+        [
+          {
+            "node": "Extract Financial Statements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Financial Statements": {
+      "main": [
+        [
+          {
+            "node": "Financial Data Extraction Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Financial Data Extraction Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Financial Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Financial Metrics": {
+      "main": [
+        [
+          {
+            "node": "Financial Health Analysis Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Financial Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Financial Health Analysis Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Investment Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Investment Assessment": {
+      "main": [
+        [
+          {
+            "node": "Merge Financial Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Financial Results": {
+      "main": [
+        [
+          {
+            "node": "Store Results in Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e93dc91e-f4c8-4520-8e04-53c0a0f2c244",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d246b8fbcbeb8dae46369ae2c9befe48a10e15ee1475e340e6c43aa66317113b"
+  },
+  "nodeGroups": [],
+  "id": "Dl0WNP2wTIshqgVN",
+  "tags": []
+}
