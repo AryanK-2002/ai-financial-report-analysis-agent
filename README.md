@@ -101,7 +101,7 @@ Extracts:
 
 ### Financial Health Assessment
 
-Generates
+Generates:
 
 - Financial Health Rating
 - Confidence Score
