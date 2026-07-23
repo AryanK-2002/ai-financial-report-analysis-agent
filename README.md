@@ -6,7 +6,7 @@ Built as an MVP for a Private Equity investment workflow, this project demonstra
 
 ---
 
-## Problem Statement
+## Problem Statement :
 
 Investment teams spend significant time manually reviewing annual reports to extract financial metrics before performing investment analysis.
 
@@ -14,7 +14,7 @@ The objective of this project is to automate this repetitive workflow while keep
 
 ---
 
-## Solution Overview
+## Solution Overview :
 
 The workflow automatically:
 
@@ -28,7 +28,7 @@ The workflow automatically:
 
 ---
 
-## Workflow Architecture
+## Workflow Architecture :
 
 Workflow Trigger
 
@@ -74,7 +74,7 @@ Store Results in Google Sheets
 
 ---
 
-## Tech Stack
+## Tech Stack :
 
 - n8n
 - Google Gemini API
@@ -83,23 +83,19 @@ Store Results in Google Sheets
 - Google Drive
 - Google Sheets
 - JavaScript
-- REST APIs
+
 
 ---
 
-## Key Features
+## Key Features :
 
 ### Automated Financial Statement Parsing
 
 Extracts:
 
-- Revenue
-- Net Income
-- Total Debt
-- Assets
-- Liabilities
-- Equity
-- Cash Flow Metrics
+- Revenue (Cr)
+- Net Income (Cr)
+- Total Debt (Cr)
 
 ---
 
@@ -109,8 +105,8 @@ Generates
 
 - Financial Health Rating
 - Confidence Score
-- Red Flags
-- Investment Recommendation
+- Financial Red Flags
+- Recommendation (Whether it needs a human review)
 
 ---
 
@@ -120,7 +116,7 @@ Results are automatically stored inside Google Sheets for downstream investment 
 
 ---
 
-## AI Agents
+## AI Agents :
 
 ### Financial Data Extraction Agent
 
@@ -151,7 +147,7 @@ or
 
 ---
 
-## Sample Output
+## Sample Output :
 
 | Company | Revenue (Cr) | Net Income (Cr) | Total Debt (Cr) | Financial Health |
 |----------|---------|------------|------|---------|
@@ -161,7 +157,7 @@ or
 
 ---
 
-## Future Improvements
+## Future Improvements :
 
 - Multi-document support
 - OCR fallback
